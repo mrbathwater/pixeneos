@@ -103,7 +103,15 @@ function build_hail_module() {
   rm -rf "${module_root}"
   mkdir -p "${apk_dir}" "${perm_dir}"
 
-  curl -sLf "${HAIL_APK_URL}" --output "${apk_dir}/Hail.apk"
+  # Fail closed: if the download errors (e.g. 404 on a missing release asset)
+  # or produces an empty/missing file, abort rather than ship a hail.zip whose
+  # privapp-permissions XML points at an absent package (GrapheneOS enforce
+  # mode boot-safety risk).
+  if ! curl -sLf "${HAIL_APK_URL}" --output "${apk_dir}/Hail.apk" || [ ! -s "${apk_dir}/Hail.apk" ]; then
+    echo -e "Error: failed to download a valid Hail APK from ${HAIL_APK_URL}"
+    rm -rf "${module_root}"
+    return 1
+  fi
 
   # Privileged-permission allowlist. MUST list exactly the privileged
   # permissions Hail declares, or GrapheneOS
