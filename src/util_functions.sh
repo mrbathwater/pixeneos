@@ -73,6 +73,56 @@ function check_and_download_dependencies() {
       [[ "${ADDITIONALS[RETRY]}" == "true" ]] && [[ "${RETRY}" == "true" ]] || break
     done
   fi
+
+  # Build the Hail module (rootless only; no signature verification needed)
+  if [[ "${ADDITIONALS[HAIL]}" == 'true' ]]; then
+    build_hail_module
+  fi
+}
+
+# Build the Hail privileged-system-app module zip consumed by `--module-hail`.
+# Downloads the prebuilt Hail.apk and lays it out at its target system paths
+# together with a privapp-permissions allowlist.
+function build_hail_module() {
+  local module_root="${WORKDIR}/hail-module"
+  local apk_dir="${module_root}/system/priv-app/Hail"
+  local perm_dir="${module_root}/system/etc/permissions"
+  local out_zip="${WORKDIR}/modules/hail.zip"
+  # Resolve to an absolute path now, before any `cd`. `zip`'s output path
+  # below is evaluated after `cd "${module_root}"`, so a relative WORKDIR
+  # (the default ".tmp") would otherwise be resolved against the wrong cwd.
+  local abs_out_zip
+  abs_out_zip="$(realpath -m "${out_zip}")"
+
+  if [ -f "${out_zip}" ]; then
+    echo -e "\`hail.zip\` already exists in \`${WORKDIR}/modules\`."
+    return
+  fi
+
+  echo -e "Building Hail module from ${HAIL_APK_URL}..."
+  rm -rf "${module_root}"
+  mkdir -p "${apk_dir}" "${perm_dir}"
+
+  curl -sLf "${HAIL_APK_URL}" --output "${apk_dir}/Hail.apk"
+
+  # Privileged-permission allowlist. MUST list exactly the privileged
+  # permissions Hail declares, or GrapheneOS
+  # (ro.control_privapp_permissions=enforce) can boot-loop.
+  cat >"${perm_dir}/privapp-permissions-${HAIL_PACKAGE}.xml" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<permissions>
+    <privapp-permissions package="${HAIL_PACKAGE}">
+        <permission name="android.permission.FORCE_STOP_PACKAGES"/>
+        <permission name="android.permission.CHANGE_COMPONENT_ENABLED_STATE"/>
+        <permission name="android.permission.MANAGE_APP_OPS_MODES"/>
+        <permission name="android.permission.PACKAGE_USAGE_STATS"/>
+    </privapp-permissions>
+</permissions>
+EOF
+
+  ( cd "${module_root}" && zip -qr "${abs_out_zip}" system )
+  rm -rf "${module_root}"
+  echo -e "\`hail.zip\` built at \`${out_zip}\`."
 }
 
 # Function to check the flag status
@@ -222,6 +272,12 @@ function patch_ota() {
     args+=("--module-oemunlockonboot-sig" "${WORKDIR}/signatures/oemunlockonboot.zip.sig")
     args+=("--module-alterinstaller-sig" "${WORKDIR}/signatures/alterinstaller.zip.sig")
 
+    # Hail privileged system app (rootless freeze/force-stop). No signature:
+    # the module is built locally and HailModule skips signature verification.
+    if [[ "${ADDITIONALS[HAIL]}" == 'true' ]]; then
+      args+=("--module-hail" "${WORKDIR}/modules/hail.zip")
+    fi
+
     # Add support for Magisk if root config is enabled
     if [[ "${ADDITIONALS[ROOT]}" == 'true' ]]; then
       echo -e "Magisk is enabled. Modifying the setup script...\n"
@@ -343,9 +399,9 @@ function url_constructor() {
   local repository_upper_case=$(echo "${repository}" | tr '[:lower:]' '[:upper:]')
 
   echo -e "Constructing URL for \`${repository}\` as \`${repository}\` is non-existent at \`${WORKDIR}\`..."
-  # `my-avbroot-setup` is git repository
+  # `my-avbroot-setup` is git repository (use our fork, which carries the Hail module)
   if [[ "${repository}" == "my-avbroot-setup" ]]; then
-    URL="${DOMAIN}/${user}/${repository}"
+    URL="${DOMAIN}/mrbathwater/${repository}"
   else
     # Afsr, avbroot, and custota-tool are binaries and are platform dependent. Modules are zipped files.
     if [[ "${repository}" == "afsr" || "${repository}" == "avbroot" || "${repository}" == "custota-tool" ]]; then

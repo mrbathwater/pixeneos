@@ -22,20 +22,26 @@ WORKDIR=".tmp"
 
 # GitHub variables
 DOMAIN="https://github.com"
-REPOSITORY="PixeneOS" # GitHub repository name
-USER="pixincreate"    # GitHub username
+REPOSITORY="ota"        # GitHub repository name (OTA release + Pages host)
+USER="mrbathwater"      # GitHub username
 
 # Application version variables
 VERSION[AFSR]="${VERSION[AFSR]:-1.0.4}"
 VERSION[ALTERINSTALLER]="${VERSION[ALTERINSTALLER]:-2.3}"
 VERSION[AVBROOT]="${VERSION[AVBROOT]:-3.29.1}"
-VERSION[AVBROOT_SETUP]="ae7c68c8e90a74991cc91bb0caa8c7e68b180846" # Commit hash
+VERSION[AVBROOT_SETUP]="hail-pinned" # mrbathwater/my-avbroot-setup branch with the Hail module
 VERSION[BCR]="${VERSION[BCR]:-3.1}"
 VERSION[CUSTOTA]="${VERSION[CUSTOTA]:-6.1}"
 VERSION[GRAPHENEOS]="${VERSION[GRAPHENEOS]:-}"
 VERSION[MAGISK]="${VERSION[MAGISK]:-}"
 VERSION[MSD]="${VERSION[MSD]:-2.0}"
 VERSION[OEMUNLOCKONBOOT]="${VERSION[OEMUNLOCKONBOOT]:-1.3}"
+VERSION[HAIL]="${VERSION[HAIL]:-v1.10.0-priv1}"
+
+# Hail (privileged system app injected into the rootless OTA)
+HAIL_REPOSITORY="mrbathwater/Hail"
+HAIL_APK_URL="${DOMAIN}/${HAIL_REPOSITORY}/releases/download/${VERSION[HAIL]}/Hail.apk"
+HAIL_PACKAGE="com.aistra.hail"
 
 # Magisk
 MAGISK[PREINIT]="${MAGISK_PREINIT:-}"
@@ -67,6 +73,7 @@ ADDITIONALS[BCR]="${ADDITIONALS[BCR]:-true}"                         # Basic Cal
 ADDITIONALS[CUSTOTA]="${ADDITIONALS[CUSTOTA]:-true}"                 # Custom OTA Updater app
 ADDITIONALS[MSD]="${ADDITIONALS[MSD]:-true}"                         # Mass Storage Device on USB
 ADDITIONALS[OEMUNLOCKONBOOT]="${ADDITIONALS[OEMUNLOCKONBOOT]:-true}" # toggle OEM unlock button on boot
+ADDITIONALS[HAIL]="${ADDITIONALS[HAIL]:-true}"                       # Hail privileged system app (rootless freeze/force-stop)
 # Tools
 ADDITIONALS[AVBROOT]="${ADDITIONALS[AVBROOT]:-true}"                   # Android Verified Boot Root
 ADDITIONALS[CUSTOTA_TOOL]="${ADDITIONALS[CUSTOTA_TOOL]:-true}"         # Custom OTA Tool
