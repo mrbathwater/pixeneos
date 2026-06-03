@@ -22,8 +22,9 @@ WORKDIR=".tmp"
 
 # GitHub variables
 DOMAIN="https://github.com"
+# OTA host: where the patched OTA is released and the Custota device JSON points.
 REPOSITORY="ota"        # GitHub repository name (OTA release + Pages host)
-USER="mrbathwater"      # GitHub username
+USER="mrbathwater"      # GitHub username (OTA host owner)
 
 # Application version variables
 VERSION[AFSR]="${VERSION[AFSR]:-1.0.4}"
@@ -43,9 +44,10 @@ HAIL_REPOSITORY="mrbathwater/Hail"
 HAIL_APK_URL="${DOMAIN}/${HAIL_REPOSITORY}/releases/download/${VERSION[HAIL]}/Hail.apk"
 HAIL_PACKAGE="com.aistra.hail"
 
-# Magisk
+# Magisk (decoupled from the OTA-host USER above; this is the upstream Magisk fork
+# pixeneos uses. get_latest_version queries its tags unconditionally, even rootless.)
 MAGISK[PREINIT]="${MAGISK_PREINIT:-}"
-MAGISK[REPOSITORY]="${USER}/Magisk"
+MAGISK[REPOSITORY]="pixincreate/Magisk"
 MAGISK[URL]="${DOMAIN}/${MAGISK[REPOSITORY]}"
 
 # Keys
