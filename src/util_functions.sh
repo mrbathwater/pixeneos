@@ -78,6 +78,13 @@ function check_and_download_dependencies() {
   if [[ "${ADDITIONALS[HAIL]}" == 'true' ]]; then
     build_hail_module
   fi
+
+  # Build the App Manager module. Rootless-only: skipped entirely on a rooted
+  # (Magisk) build so App Manager is injected as a privileged system app ONLY in
+  # the rootless flavor, exactly as required.
+  if [[ "${ADDITIONALS[APPMANAGER]}" == 'true' && "${ADDITIONALS[ROOT]}" != 'true' ]]; then
+    build_appmanager_module
+  fi
 }
 
 # Build the Hail privileged-system-app module zip consumed by `--module-hail`.
@@ -132,6 +139,113 @@ EOF
   rm -rf "${module_root}"
   echo -e "\`hail.zip\` built at \`${out_zip}\`."
 }
+
+# Build the App Manager privileged-system-app module zip consumed by
+# `--module-appmanager`. Mirrors build_hail_module: downloads the prebuilt
+# universal (all-ABI) App Manager APK and lays it out at its target system paths
+# together with a privapp-permissions allowlist.
+#
+# BOOT SAFETY (read before editing the allowlist below):
+#   GrapheneOS ships ro.control_privapp_permissions=enforce. At boot the system
+#   requires that EVERY privileged-protection permission a priv-app *requests* is
+#   present in that app's privapp-permissions allowlist; a single missing one
+#   makes system_server throw and the device BOOT-LOOPS. The allowlist is purely
+#   additive: extra/non-privileged/undefined entries are ignored, so OVER-listing
+#   is safe and UNDER-listing is catastrophic. The list below is the complete set
+#   of permissions App Manager's manifest marks protected (tools:ignore=
+#   "ProtectedPermissions") — a superset of the strictly-privileged subset — so it
+#   is guaranteed to cover every privileged permission App Manager requests.
+#   It is derived directly from the App Manager APK's manifest, as required.
+function build_appmanager_module() {
+  local module_root="${WORKDIR}/appmanager-module"
+  local apk_dir="${module_root}/system/priv-app/AppManager"
+  local perm_dir="${module_root}/system/etc/permissions"
+  local out_zip="${WORKDIR}/modules/appmanager.zip"
+  # Resolve to an absolute path now, before any `cd` (see build_hail_module).
+  local abs_out_zip
+  abs_out_zip="$(realpath -m "${out_zip}")"
+
+  if [ -f "${out_zip}" ]; then
+    echo -e "\`appmanager.zip\` already exists in \`${WORKDIR}/modules\`."
+    return
+  fi
+
+  echo -e "Building App Manager module from ${APPMANAGER_APK_URL}..."
+  rm -rf "${module_root}"
+  mkdir -p "${apk_dir}" "${perm_dir}"
+
+  # Fail closed: if the download errors (e.g. 404 on a missing release asset) or
+  # produces an empty/missing file, abort rather than ship an appmanager.zip whose
+  # privapp-permissions XML points at an absent package (GrapheneOS enforce-mode
+  # boot-safety risk).
+  if ! curl -sLf "${APPMANAGER_APK_URL}" --output "${apk_dir}/AppManager.apk" || [ ! -s "${apk_dir}/AppManager.apk" ]; then
+    echo -e "Error: failed to download a valid App Manager APK from ${APPMANAGER_APK_URL}"
+    rm -rf "${module_root}"
+    return 1
+  fi
+
+  # Optional integrity pin: a wrong/tampered/truncated APK must never reach the
+  # system image. Only enforced when APPMANAGER_APK_SHA256 is non-empty.
+  if [ -n "${APPMANAGER_APK_SHA256}" ]; then
+    if ! echo "${APPMANAGER_APK_SHA256}  ${apk_dir}/AppManager.apk" | sha256sum -c - >/dev/null 2>&1; then
+      echo -e "Error: App Manager APK SHA-256 mismatch (expected ${APPMANAGER_APK_SHA256}). Aborting."
+      rm -rf "${module_root}"
+      return 1
+    fi
+  fi
+
+  # Privileged-permission allowlist. See BOOT SAFETY note above before changing.
+  cat >"${perm_dir}/privapp-permissions-${APPMANAGER_PACKAGE}.xml" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<permissions>
+    <privapp-permissions package="${APPMANAGER_PACKAGE}">
+        <permission name="android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY"/>
+        <permission name="android.permission.BACKUP"/>
+        <permission name="android.permission.CHANGE_COMPONENT_ENABLED_STATE"/>
+        <permission name="android.permission.CHANGE_OVERLAY_PACKAGES"/>
+        <permission name="android.permission.CLEAR_APP_CACHE"/>
+        <permission name="android.permission.CLEAR_APP_USER_DATA"/>
+        <permission name="android.permission.DELETE_CACHE_FILES"/>
+        <permission name="android.permission.DELETE_PACKAGES"/>
+        <permission name="android.permission.DEVICE_POWER"/>
+        <permission name="android.permission.DUMP"/>
+        <permission name="android.permission.FORCE_STOP_PACKAGES"/>
+        <permission name="android.permission.GET_APP_OPS_STATS"/>
+        <permission name="android.permission.GET_RUNTIME_PERMISSIONS"/>
+        <permission name="android.permission.GRANT_RUNTIME_PERMISSIONS"/>
+        <permission name="android.permission.INJECT_EVENTS"/>
+        <permission name="com.android.permission.INSTALL_EXISTING_PACKAGES"/>
+        <permission name="android.permission.INSTALL_TEST_ONLY_PACKAGE"/>
+        <permission name="android.permission.INSTALL_PACKAGES"/>
+        <permission name="android.permission.INTERACT_ACROSS_USERS"/>
+        <permission name="android.permission.INTERACT_ACROSS_USERS_FULL"/>
+        <permission name="android.permission.INTERNAL_DELETE_CACHE_FILES"/>
+        <permission name="android.permission.KILL_UID"/>
+        <permission name="android.permission.MANAGE_APP_OPS_MODES"/>
+        <permission name="android.permission.MANAGE_APPOPS"/>
+        <permission name="android.permission.MANAGE_NETWORK_POLICY"/>
+        <permission name="android.permission.MANAGE_NOTIFICATION_LISTENERS"/>
+        <permission name="android.permission.MANAGE_USERS"/>
+        <permission name="android.permission.MANAGE_SENSORS"/>
+        <permission name="android.permission.NETWORK_SETTINGS"/>
+        <permission name="android.permission.PACKAGE_USAGE_STATS"/>
+        <permission name="android.permission.READ_LOGS"/>
+        <permission name="android.permission.REAL_GET_TASKS"/>
+        <permission name="android.permission.REVOKE_RUNTIME_PERMISSIONS"/>
+        <permission name="android.permission.START_ANY_ACTIVITY"/>
+        <permission name="android.permission.SUSPEND_APPS"/>
+        <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
+        <permission name="android.permission.UPDATE_DOMAIN_VERIFICATION_USER_SELECTION"/>
+        <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
+    </privapp-permissions>
+</permissions>
+EOF
+
+  ( cd "${module_root}" && zip -qr "${abs_out_zip}" system )
+  rm -rf "${module_root}"
+  echo -e "\`appmanager.zip\` built at \`${out_zip}\`."
+}
+
 
 # Function to check the flag status
 # If flag for a tool is disabled, it is not downloaded
@@ -284,6 +398,13 @@ function patch_ota() {
     # the module is built locally and HailModule skips signature verification.
     if [[ "${ADDITIONALS[HAIL]}" == 'true' ]]; then
       args+=("--module-hail" "${WORKDIR}/modules/hail.zip")
+    fi
+
+    # App Manager privileged system app (rootless only). No signature: the module
+    # is built locally and AppManagerModule skips signature verification. Guarded
+    # on ROOT!=true so it is never injected into a rooted build.
+    if [[ "${ADDITIONALS[APPMANAGER]}" == 'true' && "${ADDITIONALS[ROOT]}" != 'true' ]]; then
+      args+=("--module-appmanager" "${WORKDIR}/modules/appmanager.zip")
     fi
 
     # Add support for Magisk if root config is enabled

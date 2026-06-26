@@ -38,11 +38,26 @@ VERSION[MAGISK]="${VERSION[MAGISK]:-}"
 VERSION[MSD]="${VERSION[MSD]:-2.0}"
 VERSION[OEMUNLOCKONBOOT]="${VERSION[OEMUNLOCKONBOOT]:-1.3}"
 VERSION[HAIL]="${VERSION[HAIL]:-v1.10.0-priv1}"
+VERSION[APPMANAGER]="${VERSION[APPMANAGER]:-v4.0.5}" # App Manager release tag (used verbatim in the asset URL)
 
 # Hail (privileged system app injected into the rootless OTA)
 HAIL_REPOSITORY="mrbathwater/Hail"
 HAIL_APK_URL="${DOMAIN}/${HAIL_REPOSITORY}/releases/download/${VERSION[HAIL]}/Hail.apk"
 HAIL_PACKAGE="com.aistra.hail"
+
+# App Manager (privileged system app injected into the rootless OTA).
+# Mirrors Hail: a prebuilt APK is laid into system/priv-app + a privapp-permissions
+# allowlist; grants come from the allowlist, NOT the APK signature.
+# Override APPMANAGER_REPOSITORY / VERSION[APPMANAGER] / APPMANAGER_APK_URL to point
+# at a fork. The default is the upstream universal (all-ABI) release APK.
+APPMANAGER_REPOSITORY="${APPMANAGER_REPOSITORY:-MuntashirAkon/AppManager}"
+APPMANAGER_APK_URL="${APPMANAGER_APK_URL:-${DOMAIN}/${APPMANAGER_REPOSITORY}/releases/download/${VERSION[APPMANAGER]}/AppManager_${VERSION[APPMANAGER]}.apk}"
+# MUST equal the release applicationId. The debug build appends '.debug'; injecting
+# a '.debug' APK would make the allowlist package mismatch -> enforce-mode boot-loop.
+APPMANAGER_PACKAGE="io.github.muntashirakon.AppManager"
+# Optional integrity pin. If set, the downloaded APK's SHA-256 must match or the
+# build aborts. Clear/replace this when bumping VERSION[APPMANAGER].
+APPMANAGER_APK_SHA256="${APPMANAGER_APK_SHA256:-19d8adc99d22cd9ebc08786b7982744be94daccc9b3f1725812a776789278f0d}"
 
 # Magisk (decoupled from the OTA-host USER above; this is the upstream Magisk fork
 # pixeneos uses. get_latest_version queries its tags unconditionally, even rootless.)
@@ -76,6 +91,7 @@ ADDITIONALS[CUSTOTA]="${ADDITIONALS[CUSTOTA]:-true}"                 # Custom OT
 ADDITIONALS[MSD]="${ADDITIONALS[MSD]:-true}"                         # Mass Storage Device on USB
 ADDITIONALS[OEMUNLOCKONBOOT]="${ADDITIONALS[OEMUNLOCKONBOOT]:-true}" # toggle OEM unlock button on boot
 ADDITIONALS[HAIL]="${ADDITIONALS[HAIL]:-true}"                       # Hail privileged system app (rootless freeze/force-stop)
+ADDITIONALS[APPMANAGER]="${ADDITIONALS[APPMANAGER]:-true}"           # App Manager privileged system app (rootless only; ignored when ROOT=true)
 # Tools
 ADDITIONALS[AVBROOT]="${ADDITIONALS[AVBROOT]:-true}"                   # Android Verified Boot Root
 ADDITIONALS[CUSTOTA_TOOL]="${ADDITIONALS[CUSTOTA_TOOL]:-true}"         # Custom OTA Tool
