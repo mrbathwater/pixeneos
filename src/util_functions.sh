@@ -241,6 +241,26 @@ function build_appmanager_module() {
 </permissions>
 EOF
 
+  # Installer-conflict fix (GrapheneOS boot-safety): as a privileged system app,
+  # App Manager's installer activities also satisfy the platform "required installer"
+  # resolution (ACTION_INSTALL_PACKAGE among system apps), which must match EXACTLY ONE
+  # app or system_server aborts at boot ("There must be exactly one installer") -> boot
+  # loop. Make App Manager's PackageInstallerActivity the sole installer by disabling the
+  # stock packageinstaller InstallStart and App Manager's ActivityInterceptor. (To keep
+  # the stock installer instead, disable both App Manager installer components here.)
+  mkdir -p "${module_root}/system/etc/sysconfig"
+  cat >"${module_root}/system/etc/sysconfig/appmanager-installer-override.xml" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<config>
+    <component-override package="com.android.packageinstaller">
+        <component class="com.android.packageinstaller.InstallStart" enabled="false"/>
+    </component-override>
+    <component-override package="${APPMANAGER_PACKAGE}">
+        <component class="io.github.muntashirakon.AppManager.intercept.ActivityInterceptor" enabled="false"/>
+    </component-override>
+</config>
+EOF
+
   ( cd "${module_root}" && zip -qr "${abs_out_zip}" system )
   rm -rf "${module_root}"
   echo -e "\`appmanager.zip\` built at \`${out_zip}\`."
